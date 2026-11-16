@@ -15,7 +15,7 @@
     <!--
       Full-window template: the game canvas always fills the browser window (desktop and mobile), the loading bar sits
       in the middle, and a button in the corner switches the page to real fullscreen and back. On phones and tablets
-      the first tap on the game also enters fullscreen and keeps the screen in portrait where the browser allows it.
+      the first tap on the game also enters fullscreen and keeps the screen in landscape where the browser allows it.
     -->
     <div id="unity-container">
       <canvas id="unity-canvas" tabindex="-1"></canvas>
@@ -76,9 +76,11 @@
 
         var result = request.call(container);
         if (result && result.then) {
-          result.then(lockPortrait).catch(function () { });
+          result.then(lockLandscape).catch(function (error) {
+            console.warn("Fullscreen request failed:", error);
+          });
         } else {
-          lockPortrait();
+          lockLandscape();
         }
       }
 
@@ -89,10 +91,15 @@
         }
       }
 
-      // The game is made for a portrait screen; browsers only allow locking it while in fullscreen.
-      function lockPortrait() {
-        if (isMobile && screen.orientation && screen.orientation.lock) {
-          screen.orientation.lock("portrait").catch(function () { });
+      // The game is made for a landscape screen (UI reference 1920x1080); browsers only allow locking it while in
+      // fullscreen, and there it also turns the screen when the phone's auto-rotate is off. Not limited to isMobile:
+      // phones in "Desktop site" mode report a desktop user agent; desktop browsers just reject the lock.
+      // Player Settings > Orientation allows landscape only, so Unity's own lock asks for "landscape" as well.
+      function lockLandscape() {
+        if (screen.orientation && screen.orientation.lock) {
+          screen.orientation.lock("landscape").catch(function (error) {
+            console.warn("Landscape lock failed:", error);
+          });
         }
       }
 
