@@ -18,3 +18,12 @@ body { touch-action: none; -webkit-user-select: none; user-select: none; -webkit
 #unity-fullscreen-button.is-fullscreen {
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round'><path d='M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5'/></svg>"); }
 #unity-fullscreen-button:hover { background-color: rgba(0, 0, 0, 0.5); }
+
+/* "Turn your phone" screen: covers the game while a phone is held upright and the rotation is not locked. */
+#unity-rotate-hint { position: absolute; inset: 0; z-index: 3; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 20px; padding: 16px;
+  background: rgba(30, 30, 30, 0.92); color: #fff; font-family: "Trebuchet MS", Arial, sans-serif; text-align: center; }
+#unity-rotate-hint-icon { width: 96px; height: 96px; animation: unity-rotate-phone 2s ease-in-out infinite;
+  background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><rect x='7' y='2' width='10' height='20' rx='2'/><path d='M11 18h2'/></svg>") no-repeat center / contain; }
+#unity-rotate-hint-text { max-width: 340px; font-size: 20px; font-weight: bold; line-height: 1.4; }
+#unity-rotate-hint-text small { display: block; margin-top: 10px; font-size: 15px; font-weight: normal; opacity: 0.85; }
+@keyframes unity-rotate-phone { 0%, 20% { transform: rotate(0deg); } 50%, 80% { transform: rotate(-90deg); } 100% { transform: rotate(0deg); } }

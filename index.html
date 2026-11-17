@@ -15,7 +15,8 @@
     <!--
       Full-window template: the game canvas always fills the browser window (desktop and mobile), the loading bar sits
       in the middle, and a button in the corner switches the page to real fullscreen and back. On phones and tablets
-      the first tap on the game also enters fullscreen and keeps the screen in landscape where the browser allows it.
+      the first tap on the game also enters fullscreen. Pressing Start in the game keeps the screen in landscape (see
+      the Landscape section below).
     -->
     <div id="unity-container">
       <canvas id="unity-canvas" tabindex="-1"></canvas>
@@ -25,6 +26,10 @@
       </div>
       <div id="unity-warning"></div>
       <button id="unity-fullscreen-button" type="button" title="Fullscreen" aria-label="Fullscreen"></button>
+      <div id="unity-rotate-hint">
+        <div id="unity-rotate-hint-icon"></div>
+        <div id="unity-rotate-hint-text"></div>
+      </div>
     </div>
     <script>
       var container        = document.querySelector("#unity-container");
@@ -32,7 +37,11 @@
       var loading          = document.querySelector("#unity-loading");
       var progressFill     = document.querySelector("#unity-progress-fill");
       var fullscreenButton = document.querySelector("#unity-fullscreen-button");
-      var isMobile         = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      var rotateHint       = document.querySelector("#unity-rotate-hint");
+      var rotateHintText   = document.querySelector("#unity-rotate-hint-text");
+      // iPadOS reports itself as a Mac, so a Mac with a touch screen is an iPad.
+      var isIOS            = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+      var isMobile         = isIOS || /Android/i.test(navigator.userAgent);
 
       // Shows a message for a few seconds, or a permanent one on top of the canvas for errors.
       function unityShowBanner(message, type) {
@@ -68,19 +77,29 @@
         return !!(container.requestFullscreen || container.webkitRequestFullscreen);
       }
 
-      function enterFullscreen() {
+      // Goes fullscreen; onEntered runs once the page is fullscreen (right away when it already is).
+      function enterFullscreen(onEntered) {
+        if (getFullscreenElement()) {
+          if (onEntered) {
+            onEntered();
+          }
+          return;
+        }
+
         var request = container.requestFullscreen || container.webkitRequestFullscreen;
-        if (!request || getFullscreenElement()) {
+        if (!request) {
           return;
         }
 
         var result = request.call(container);
         if (result && result.then) {
-          result.then(lockLandscape).catch(function (error) {
-            console.warn("Fullscreen request failed:", error);
-          });
-        } else {
-          lockLandscape();
+          result.then(function () {
+            if (onEntered) {
+              onEntered();
+            }
+          }).catch(function () { });
+        } else if (onEntered) {
+          onEntered();
         }
       }
 
@@ -91,21 +110,75 @@
         }
       }
 
-      // The game is made for a landscape screen (UI reference 1920x1080); browsers only allow locking it while in
-      // fullscreen, and there it also turns the screen when the phone's auto-rotate is off. Not limited to isMobile:
-      // phones in "Desktop site" mode report a desktop user agent; desktop browsers just reject the lock.
-      // Player Settings > Orientation allows landscape only, so Unity's own lock asks for "landscape" as well.
-      function lockLandscape() {
-        if (screen.orientation && screen.orientation.lock) {
-          screen.orientation.lock("landscape").catch(function (error) {
-            console.warn("Landscape lock failed:", error);
-          });
-        }
-      }
-
       function refreshFullscreenButton() {
         fullscreenButton.classList.toggle("is-fullscreen", !!getFullscreenElement());
       }
+
+      // --- Landscape --------------------------------------------------------------------------------------------
+      // The game is made for a landscape screen. Pressing Start in the game calls gameRequestLandscape():
+      // - Android: the page goes fullscreen and the rotation is locked to landscape, so turning the phone upright
+      //   changes nothing. Browsers only allow the lock while fullscreen; leaving fullscreen releases it.
+      // - iPhone: Safari can neither go fullscreen nor lock the rotation, so a "turn your phone" screen covers the
+      //   game while the phone is held upright (from the start, the menu is landscape too).
+      // Whenever the lock is missing after Start (fullscreen left, lock refused), the same screen shows on Android
+      // too, and tapping it asks for fullscreen and the lock again.
+
+      var isLandscapeRequested = false;
+      var isLandscapeLocked    = false;
+
+      function isPortrait() {
+        return window.innerHeight > window.innerWidth;
+      }
+
+      function refreshRotateHint() {
+        var isHintNeeded = isMobile && isPortrait() && !isLandscapeLocked && (isIOS || isLandscapeRequested);
+        rotateHint.style.display = isHintNeeded ? "flex" : "none";
+      }
+
+      function lockLandscape() {
+        if (!screen.orientation || !screen.orientation.lock) {
+          refreshRotateHint();
+          return;
+        }
+
+        screen.orientation.lock("landscape").then(function () {
+          isLandscapeLocked = true;
+          refreshRotateHint();
+        }).catch(function () {
+          isLandscapeLocked = false;
+          refreshRotateHint();
+        });
+      }
+
+      window.gameRequestLandscape = function () {
+        isLandscapeRequested = true;
+        if (isMobile && !isIOS) {
+          enterFullscreen(lockLandscape);
+        }
+        refreshRotateHint();
+      };
+
+      function onFullscreenChanged() {
+        refreshFullscreenButton();
+        if (!getFullscreenElement()) {
+          isLandscapeLocked = false;
+          refreshRotateHint();
+        }
+      }
+
+      rotateHintText.innerHTML = isIOS
+        ? "Hãy xoay ngang điện thoại để chơi nhé!<small>Nếu màn hình không xoay, hãy tắt Khóa xoay màn hình trong Trung tâm điều khiển.</small>"
+        : "Hãy xoay ngang điện thoại để chơi nhé!<small>Chạm vào đây để chơi toàn màn hình.</small>";
+
+      // Android: the tap is what lets the browser go fullscreen again.
+      rotateHint.addEventListener("click", function () {
+        if (isLandscapeRequested && !isIOS) {
+          window.gameRequestLandscape();
+        }
+      });
+      window.addEventListener("resize", refreshRotateHint);
+      window.addEventListener("orientationchange", refreshRotateHint);
+      refreshRotateHint();
 
       if (isFullscreenSupported()) {
         fullscreenButton.addEventListener("click", function () {
@@ -115,8 +188,8 @@
             enterFullscreen();
           }
         });
-        document.addEventListener("fullscreenchange", refreshFullscreenButton);
-        document.addEventListener("webkitfullscreenchange", refreshFullscreenButton);
+        document.addEventListener("fullscreenchange", onFullscreenChanged);
+        document.addEventListener("webkitfullscreenchange", onFullscreenChanged);
 
         // Phones: the first tap on the game goes fullscreen (browsers only allow it from a tap).
         if (isMobile) {
@@ -136,9 +209,9 @@
       var loaderUrl = buildUrl + "/EconomyForKid.loader.js";
       var config = {
         arguments: [],
-        dataUrl: buildUrl + "/EconomyForKid.data.unityweb",
-        frameworkUrl: buildUrl + "/EconomyForKid.framework.js.unityweb",
-        codeUrl: buildUrl + "/EconomyForKid.wasm.unityweb",
+        dataUrl: buildUrl + "/EconomyForKid.data",
+        frameworkUrl: buildUrl + "/EconomyForKid.framework.js",
+        codeUrl: buildUrl + "/EconomyForKid.wasm",
         streamingAssetsUrl: "StreamingAssets",
         companyName: "DefaultCompany",
         productName: "EconomyGameForKid",
